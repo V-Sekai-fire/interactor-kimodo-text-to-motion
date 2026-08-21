@@ -7,12 +7,12 @@ packaging convention. Facts from
 
 ## Model
 
-| Property | Value |
-|---|---|
-| Upstream | [nv-tlabs/kimodo](https://github.com/nv-tlabs/kimodo) (NVIDIA), kinematic motion diffusion |
-| License | Code: Apache-2.0. Weights: **per-checkpoint** — see below, this was reviewed and resolved, not left pending |
-| Parameters | 0.3 B, estimated |
-| bf16 | 0.6 GB — the ship format (no Q4_K_M at this size) |
+| Property   | Value                                                                                                       |
+| ---------- | ----------------------------------------------------------------------------------------------------------- |
+| Upstream   | [nv-tlabs/kimodo](https://github.com/nv-tlabs/kimodo) (NVIDIA), kinematic motion diffusion                  |
+| License    | Code: Apache-2.0. Weights: **per-checkpoint** — see below, this was reviewed and resolved, not left pending |
+| Parameters | 0.3 B, estimated                                                                                            |
+| bf16       | 0.6 GB — the ship format (no Q4_K_M at this size)                                                           |
 
 ### License, resolved
 
@@ -31,13 +31,13 @@ variant would fail it.
 
 `POST /predict`:
 
-| Input | Type | Default | Note |
-|---|---|---|---|
-| `prompt` | str | required | The motion, as a sentence |
-| `duration_seconds` | float | 4.0 | 0.5–30.0 |
-| `fps` | int | 30 | 12–120 |
-| `target_rig` | Path/URL/base64 VRM | none | Optional. Without it, SOMA only, no retarget |
-| `seed` | int | -1 | |
+| Input              | Type                | Default  | Note                                         |
+| ------------------ | ------------------- | -------- | -------------------------------------------- |
+| `prompt`           | str                 | required | The motion, as a sentence                    |
+| `duration_seconds` | float               | 4.0      | 0.5–30.0                                     |
+| `fps`              | int                 | 30       | 12–120                                       |
+| `target_rig`       | Path/URL/base64 VRM | none     | Optional. Without it, SOMA only, no retarget |
+| `seed`             | int                 | -1       |                                              |
 
 Returns `{soma, vrm, valid, validation_detail, seed, stub}`. `soma` and `vrm` are kept as separate
 fields on purpose (RFD 0045): a single merged output would make the model look wrong when it's
