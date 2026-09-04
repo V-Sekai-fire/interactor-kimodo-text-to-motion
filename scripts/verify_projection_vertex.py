@@ -196,6 +196,76 @@ print(f"\n=== NEGATIVE (b): LeftArm zeroed on makehuman pose only, SOMA gets ful
 print(f"  max:  {negative_b['max_mm']:8.3f} mm  ({anchor(negative_b['max_mm'])})")
 print(f"  mean: {negative_b['mean_mm']:8.3f} mm  ({anchor(negative_b['mean_mm'])})")
 
+# ---------- ANCHOR MASS CHECK: anchors must live in the checked subset (rule 3) ----------
+# HERD's follow-up: the body-surface filter excluded 3,380 verts as
+# non-body (interior, hair, teeth, eye internals). If any of the 133
+# wholebody anchors puts appreciable weight mass on those excluded
+# verts, that anchor is UNCHECKED — its regressed keypoint depends on
+# vertices whose projection error we didn't measure. Name each such
+# anchor rather than pass quietly.
+
+import os as _os
+PTH_PATH = _os.environ.get("WHOLEBODY133_PTH", r"C:/weftspun-keypoints/2-contract/anny-keypoint-anchors/wholebody133.pth")
+if _os.path.exists(PTH_PATH):
+    print(f"\n=== Anchor mass check: {PTH_PATH} ===")
+    anchor_weights = torch.load(PTH_PATH, weights_only=True)
+    excluded_mask = ~surface_mask
+    unchecked = []
+    for label, w in anchor_weights.items():
+        if isinstance(w, torch.Tensor) and w.shape[0] == 19158:
+            total_mass = float(w.abs().sum())
+            if total_mass < 1e-9:
+                continue
+            excluded_mass = float(w[excluded_mask].abs().sum())
+            ratio = excluded_mass / total_mass
+            if ratio > 0.01:  # 1% threshold
+                unchecked.append((label, excluded_mass, total_mass, ratio))
+    if unchecked:
+        print(f"  {len(unchecked)}/{len(anchor_weights)} anchors have >1% mass on excluded (unchecked) verts:")
+        for label, ex, tot, r in unchecked[:15]:
+            print(f"    {label:30s}  excluded_mass={ex:.4f}/{tot:.4f} = {r*100:.1f}%")
+        if len(unchecked) > 15:
+            print(f"    ...{len(unchecked)-15} more")
+        print(f"  NOTE: these anchors' projection accuracy is not covered by the vertex check above.")
+        print(f"  Surface this as a finding for ANCHOR — the body-surface subset may need extension.")
+    else:
+        print(f"  All {len(anchor_weights)} anchors have <1% mass on excluded verts. Anchors live in the checked subset.")
+else:
+    print(f"\nNOT-MEASURED: wholebody133.pth not found at {PTH_PATH}; anchor mass check skipped")
+
+
+# ---------- NEGATIVE (c): TRUE weight-transfer control per HERD's follow-up ----------
+# Failure class the projection could actually produce: LeftArm's
+# skinning weights got mis-transferred at build time, so vertices that
+# should follow LeftArm don't. Simulate: on a deep copy of the
+# makehuman model, find every vertex whose vertex_bone_indices row
+# contains LeftArm's bone index, zero that slot's weight and
+# renormalize the row. On a limb-moving pose the arm vertices should
+# lag behind their SOMA-projected reference by centimetres.
+
+left_arm_bone_idx = labels.index("LeftArm")
+print(f"\n=== NEGATIVE (c): TRUE weight-transfer corruption (LeftArm slot zeroed on affected verts) ===")
+
+model_c = copy.deepcopy(anny_mh)
+vbi = model_c.vertex_bone_indices  # (19158, 13)
+weights_c = model_c.vertex_bone_weights  # (19158, 13)
+# For each vertex, find which slots point at LeftArm; zero those slots.
+# vbi.eq(left_arm_bone_idx) gives (V, 13) bool mask of the (v, slot) pairs to zero.
+slots_to_zero = vbi.eq(left_arm_bone_idx)  # (19158, 13)
+n_affected_verts = int(slots_to_zero.any(dim=1).sum())
+with torch.no_grad():
+    weights_c[slots_to_zero] = 0.0
+    row_sums = weights_c.sum(dim=1, keepdim=True)
+    weights_c.div_(row_sums.clamp(min=1e-9))
+print(f"  Zeroed LeftArm slots on {n_affected_verts} verts (vertex_bone_indices matched bone {left_arm_bone_idx})")
+
+# Run the check on the SAME limb-moving pose used for negative (b)
+verts_mh_c_bad = _pose(model_c, pose_limb_full, phenotype)
+negative_c = _diff(verts_mh_c_bad, verts_soma_at_mh_limb, mask=surface_mask)
+print(f"  max:  {negative_c['max_mm']:8.3f} mm  ({anchor(negative_c['max_mm'])})")
+print(f"  mean: {negative_c['mean_mm']:8.3f} mm  ({anchor(negative_c['mean_mm'])})")
+
+
 detection_floor = 100.0 * 3 / T
 print(f"\n=== Summary ===")
 print(f"  detection floor at n={T}: any defect > ~{detection_floor:.0f}% of frames per CLAUDE.md rule 5")
