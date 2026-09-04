@@ -36,7 +36,9 @@ RUN pip3 install --no-cache-dir torch --index-url https://download.pytorch.org/w
 # TEXT_ENCODER_DEVICE=cpu keeps text encoder off the sampler GPU on
 # small-VRAM boxes.
 RUN pip3 install --no-cache-dir \
-    "kimodo[soma] @ git+https://github.com/nv-tlabs/kimodo.git@main"
+    "kimodo[soma] @ git+https://github.com/nv-tlabs/kimodo.git@main" \
+    "anny @ git+https://github.com/naver/anny.git" \
+    roma
 
 ENV KIMODO_MODEL=Kimodo-SOMA-RP-v1.1
 COPY server.py /app/server.py

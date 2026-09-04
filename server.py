@@ -14,8 +14,16 @@ import os
 import tempfile
 from pathlib import Path
 
+# CPU cap for the anny SOMA-rig posing step. VRChat interactivity on this
+# box is the reason; 4 threads for anny's batched forward leaves headroom
+# for the interactive GPU's driver work. Set before torch import so it
+# takes effect on the first forward.
+os.environ.setdefault("OMP_NUM_THREADS", "4")
+os.environ.setdefault("MKL_NUM_THREADS", "4")
+
 STUB = os.environ.get("WEFTSPUN_STUB") == "1"
 KIMODO_MODEL = os.environ.get("KIMODO_MODEL", "Kimodo-SOMA-RP-v1.1")
+ANNY_MODEL_CACHE = {"anny": None}
 _READY = {"loaded": False}
 _MODEL = {"model": None, "resolved_name": None, "device": None}
 
@@ -98,16 +106,86 @@ def _run_upstream(args: dict, work: Path) -> Path:
     return npz_path
 
 
+def _pose_anny_from_soma(soma_npz: Path, work: Path) -> Path:
+    """v1 retarget scope per RFD 2203: SOMA -> ANNY posed vertices only.
+    No Godot, no VRM. Loads Kimodo's local rotations + root positions
+    from the .npz, drives an anny model wearing the SOMA rig on the
+    19,158-vertex makehuman topology (matches wholebody133.pth's
+    indexing), returns (T, 19158, 3) posed vertices as an .npz.
+
+    The one-root-identity prepend: Kimodo emits 77 SOMA joint rotations;
+    anny takes 78 pose parameters (root at index 0 + 77). anny/test/
+    test_soma.py:242-283 shows the pattern verified against upstream
+    SOMALayer at ~7mm max / ~0.6mm mean on topology=soma. This function
+    uses topology=makehuman which routes through
+    apply_procrustes_retopology; that projection path is
+    accuracy-checked by test_pose_reproducibility.py."""
+    import numpy as np
+    import roma
+    import torch
+
+    torch.set_num_threads(4)
+
+    anny_model = ANNY_MODEL_CACHE["anny"]
+    if anny_model is None:
+        raise RuntimeError("anny model not loaded; load() must run first")
+
+    device = _MODEL.get("device") or "cpu"
+    dtype = torch.float32
+    data = np.load(str(soma_npz), allow_pickle=False)
+    local_rot_mats = torch.from_numpy(np.asarray(data["local_rot_mats"])).to(device=device, dtype=dtype)
+    root_positions = torch.from_numpy(np.asarray(data["root_positions"])).to(device=device, dtype=dtype)
+
+    # local_rot_mats shape is (T, J, 3, 3). anny takes (B, 78, 4, 4)
+    # homogeneous transforms with root at index 0. Kimodo's J = 77 for
+    # SOMA-77 skeleton, so prepend one identity rotation for root.
+    T = int(local_rot_mats.shape[0])
+    J = int(local_rot_mats.shape[1])
+    if J not in (77, 78):
+        raise RuntimeError(f"unexpected SOMA joint count J={J}; expected 77 (root separate) or 78 (root at index 0)")
+
+    rotvec = roma.rotmat_to_rotvec(local_rot_mats)
+    if J == 77:
+        root_pad = torch.zeros((T, 1, 3), device=device, dtype=dtype)
+        rotvec_ext = torch.cat((root_pad, rotvec), dim=1)
+    else:
+        rotvec_ext = rotvec
+
+    pose_rotmat = roma.rotvec_to_rotmat(rotvec_ext)
+    pose_parameters = roma.Rigid(pose_rotmat, translation=None).to_homogeneous()
+    pose_parameters[:, 0, :3, 3] = root_positions
+
+    # Neutral phenotype + no local changes for v1: a single average body,
+    # not a distribution over phenotypes. Corpus renders can vary
+    # phenotype via a separate mechanism; the retarget itself doesn't
+    # need to.
+    phenotype_kwargs = torch.zeros((T, len(anny_model.phenotype_labels)), device=device, dtype=dtype)
+    local_changes_kwargs = dict()
+
+    output = anny_model(
+        pose_parameters=pose_parameters,
+        phenotype_kwargs=phenotype_kwargs,
+        local_changes_kwargs=local_changes_kwargs,
+    )
+    vertices = output["vertices"]
+    if vertices.shape[-2] != 19158:
+        raise RuntimeError(
+            f"anny returned vertices.shape={tuple(vertices.shape)}; expected trailing 19158 "
+            f"to match wholebody133.pth indexing. Check TopologyConfig(remove_unattached_vertices=False)."
+        )
+
+    out_path = work / "anny_posed_vertices.npz"
+    np.savez(str(out_path), vertices=vertices.detach().cpu().numpy(), fps=float(_MODEL["model"].fps if _MODEL["model"] else 30.0))
+    return out_path
+
+
 def _retarget(soma: Path, target_rig: str, work: Path) -> Path:
-    """Not yet wired -- SOMA -> ANNY -> Godot Humanoid -> VRM, via the
-    canonical joint pivot table in meshula/LabRCSF's joints.csv
-    (columns include ANNY, Godot, and VRM among ~14 rigs, keyed by a
-    CanonicalJoint pivot -- not a direct name-to-name guess). See
-    README's Status."""
+    """v2 deliverable: SOMA -> ANNY -> Godot Humanoid -> VRM via
+    LabRCSF's joints.csv. Not in v1 scope per RFD 2203; v1 stops at
+    ANNY posed vertices."""
     raise NotImplementedError(
-        "Port the SOMA -> ANNY -> Godot Humanoid -> VRM retarget here, using "
-        "meshula/LabRCSF's joints.csv as the canonical joint pivot table -- "
-        "see README's Status"
+        "VRM export deferred to v2. Use _pose_anny_from_soma() for v1's "
+        "ANNY-posed-vertices output; see RFD 2203 for scope."
     )
 
 
@@ -136,6 +214,15 @@ def predict(job_input: dict) -> dict:
 
     valid, detail = _validate_motion(soma)
 
+    # v1: always pose ANNY from SOMA output. target_rig gates VRM only,
+    # which is v2 (still NotImplementedError). ANNY-posed-vertices is
+    # what RFD 2203's corpus render consumes; no target_rig required.
+    if STUB:
+        anny_path = work / "stub.anny_vertices.npz"
+        anny_path.write_bytes(b"ANNYvertsSTUB")
+    else:
+        anny_path = _pose_anny_from_soma(soma, work)
+
     vrm = None
     if args["target_rig"]:
         if STUB:
@@ -147,6 +234,7 @@ def predict(job_input: dict) -> dict:
 
     return {
         "soma": _encode(soma),
+        "anny_posed_vertices": _encode(anny_path),
         "vrm": vrm,
         "valid": valid,
         "validation_detail": detail,
@@ -159,10 +247,14 @@ def predict(job_input: dict) -> dict:
 
 def load() -> None:
     if not STUB:
-        # Load the checkpoint once at startup, keep it resident. Cold
-        # load is expensive; per-request reload would be a mistake.
+        # Load both models once at startup, keep resident. Cold load is
+        # expensive; per-request reload would be a mistake.
+        import anny
         import torch
+        from anny.models.model_data import TopologyConfig
         from kimodo import load_model
+
+        torch.set_num_threads(4)
 
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         model, resolved = load_model(
@@ -174,6 +266,18 @@ def load() -> None:
         _MODEL["model"] = model
         _MODEL["resolved_name"] = resolved
         _MODEL["device"] = device
+
+        # SOMA rig on the 19,158-vertex makehuman topology per RFD 2203
+        # topology settlement. remove_unattached_vertices=False keeps
+        # the full 19,158 count that wholebody133.pth indexes against;
+        # the default True drops vertices and breaks the anchor
+        # indexing.
+        ANNY_MODEL_CACHE["anny"] = anny.Anny(
+            rig="soma",
+            topology=TopologyConfig(base_mesh="makehuman", remove_unattached_vertices=False),
+            pose_parameterization="local-ref",
+            phenotypes="all",
+        ).to(device=device, dtype=torch.float32)
     _READY["loaded"] = True
 
 
