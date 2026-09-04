@@ -15,7 +15,9 @@ import tempfile
 from pathlib import Path
 
 STUB = os.environ.get("WEFTSPUN_STUB") == "1"
+KIMODO_MODEL = os.environ.get("KIMODO_MODEL", "Kimodo-SOMA-RP-v1.1")
 _READY = {"loaded": False}
+_MODEL = {"model": None, "resolved_name": None, "device": None}
 
 
 class InputError(ValueError):
@@ -41,12 +43,59 @@ def _validate(job_input: dict) -> dict:
 
 
 def _run_upstream(args: dict, work: Path) -> Path:
-    """Not yet wired -- the Kimodo sampler call against the real
-    checkpoint (Kimodo-SOMA, NVIDIA Open Model License, see README) is
-    not yet verified against the upstream repo."""
-    raise NotImplementedError(
-        "Port the Kimodo sampler here -- see nv-tlabs/kimodo and README's Status"
+    """Sampler over Kimodo-SOMA-RP-v1.1 (NVIDIA Open Model License).
+    Emits at the model's intrinsic fps; caller's requested fps is
+    honoured for `num_frames` computation but not resampled downstream --
+    the response reports the emitted fps in `model_fps` so the retarget
+    stage can resample to the target rig's rate if needed."""
+    import numpy as np
+    from kimodo.exports.motion_io import save_kimodo_npz
+    from kimodo.tools import seed_everything
+
+    if _MODEL["model"] is None:
+        raise RuntimeError("kimodo model not loaded; load() must run first")
+    model = _MODEL["model"]
+
+    # A single-sentence prompt is one text; the upstream CLI splits on
+    # periods to support multi-prompt sequences. Preserve that so
+    # callers who send "Walk forward. Then turn left." get the
+    # transition sequence rather than one prompt with a period in it.
+    texts = [t.strip() + "." for t in args["prompt"].split(".") if t.strip()]
+    if not texts:
+        raise InputError("prompt collapsed to empty after splitting on periods")
+
+    # num_frames is per-prompt; use the same duration for each split
+    # unless the caller sends a multi-duration string in a later
+    # revision. Compute at model.fps because that's the sampling rate;
+    # target-rig retarget resamples if it needs a different rate.
+    per_prompt_frames = int(args["duration_seconds"] * model.fps)
+    num_frames = [per_prompt_frames] * len(texts)
+
+    if args["seed"] >= 0:
+        seed_everything(args["seed"])
+
+    output = model(
+        texts,
+        num_frames,
+        constraint_lst=[],
+        num_denoising_steps=100,
+        num_samples=1,
+        multi_prompt=True,
+        num_transition_frames=5,
+        post_processing=True,
+        return_numpy=True,
     )
+
+    # `output` is a dict of arrays with leading n_samples dim; strip
+    # that dim for the single-sample case so save_kimodo_npz gets the
+    # per-clip shape it expects.
+    single = {
+        k: (v[0] if hasattr(v, "shape") and len(v.shape) > 0 and v.shape[0] == 1 else v)
+        for k, v in output.items()
+    }
+    npz_path = work / "output.npz"
+    save_kimodo_npz(str(npz_path), single)
+    return npz_path
 
 
 def _retarget(soma: Path, target_rig: str, work: Path) -> Path:
@@ -103,10 +152,28 @@ def predict(job_input: dict) -> dict:
         "validation_detail": detail,
         "seed": args["seed"],
         "stub": STUB,
+        "model": None if STUB else _MODEL["resolved_name"],
+        "model_fps": None if STUB or _MODEL["model"] is None else int(_MODEL["model"].fps),
     }
 
 
 def load() -> None:
+    if not STUB:
+        # Load the checkpoint once at startup, keep it resident. Cold
+        # load is expensive; per-request reload would be a mistake.
+        import torch
+        from kimodo import load_model
+
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        model, resolved = load_model(
+            KIMODO_MODEL,
+            device=device,
+            default_family="Kimodo",
+            return_resolved_name=True,
+        )
+        _MODEL["model"] = model
+        _MODEL["resolved_name"] = resolved
+        _MODEL["device"] = device
     _READY["loaded"] = True
 
 
