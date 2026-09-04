@@ -30,14 +30,17 @@ RUN pip3 install --no-cache-dir torch --index-url https://download.pytorch.org/w
 # what this interface returns (RFD 0045: "the model image returns
 # SOMA only" without a target_rig) -- do not swap in the SMPLX
 # checkpoint without re-checking the license gate (RFD 0028).
-ARG KIMODO_REPO=nv-tlabs/kimodo-soma
-RUN mkdir -p /weights && \
-    python3 -c "\
-from huggingface_hub import hf_hub_download; \
-import shutil; \
-shutil.copy(hf_hub_download(repo_id='${KIMODO_REPO}', filename='kimodo.safetensors'), '/weights/kimodo.safetensors')" \
-    || echo "weight fetch deferred -- confirm exact HF repo id before real build"
+# Install the kimodo package from upstream + the SOMA-X extra it needs
+# for the SOMA-77 skeleton. Checkpoints (Kimodo-SOMA-RP-v1.1 by default,
+# override with KIMODO_MODEL) auto-download from HF on first load;
+# TEXT_ENCODER_DEVICE=cpu keeps text encoder off the sampler GPU on
+# small-VRAM boxes.
+RUN pip3 install --no-cache-dir \
+    "kimodo[soma] @ git+https://github.com/nv-tlabs/kimodo.git@main" \
+    "anny @ git+https://github.com/naver/anny.git" \
+    roma
 
+ENV KIMODO_MODEL=Kimodo-SOMA-RP-v1.1
 COPY server.py /app/server.py
 
 ENV PORT=8000
