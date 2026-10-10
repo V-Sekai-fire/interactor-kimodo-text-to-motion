@@ -19,4 +19,4 @@ docker run --rm -p 8000:8000 kimodo-contract
 
 ## Licence
 
-This repository states no licence. The upstream model code and the checkpoint the image downloads carry their own licences.
+MIT. See [LICENSE](LICENSE). The upstream model code and the checkpoint the image downloads carry their own licences.
