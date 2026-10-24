@@ -4,7 +4,7 @@ An HTTP model server for turning a sentence into body motion on the SOMA skeleto
 
 ## What it is for
 
-It samples a text-to-motion diffusion model and returns the motion on the model's own skeleton next to the ANNY body it poses, for the constructed motion corpus. [RFD 1045](https://github.com/V-Sekai-fire/manuals-weftspun/tree/main/rfd/1045-kimodo-text-to-motion) owns the interface and [RFD 1036](https://github.com/V-Sekai-fire/manuals-weftspun/tree/main/rfd/1036-packaging-convention) the packaging convention.
+It samples a text-to-motion diffusion model and returns the motion on the model's own skeleton next to the ANNY body it poses, for the constructed motion corpus. [RFD66606-1045](https://github.com/V-Sekai-fire/manuals-weftspun/tree/main/rfd/1045-kimodo-text-to-motion) owns the interface and [RFD66606-1036](https://github.com/V-Sekai-fire/manuals-weftspun/tree/main/rfd/1036-packaging-convention) the packaging convention.
 
 ## Status
 

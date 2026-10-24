@@ -1,6 +1,6 @@
-# interactor-kimodo-text-to-motion -- vast.ai worker, RFD 0036/0045.
+# interactor-kimodo-text-to-motion -- vast.ai worker, RFD66606-0036/0045.
 #
-# Small model (0.6 GB bf16) -- ships bf16, not Q4_K_M (RFD 0045's own
+# Small model (0.6 GB bf16) -- ships bf16, not Q4_K_M (RFD66606-0045's own
 # table lists bf16 as the format; no quant win worth the complexity at
 # this size).
 
@@ -27,9 +27,9 @@ RUN pip3 install --no-cache-dir torch --index-url https://download.pytorch.org/w
 # checkpoint (see README): Kimodo-SOMA/Kimodo-G1 are NVIDIA Open Model
 # License (commercial-friendly); Kimodo-SMPLX is the more restrictive
 # NVIDIA R&D Model License. This image ships Kimodo-SOMA, matching
-# what this interface returns (RFD 0045: "the model image returns
+# what this interface returns (RFD66606-0045: "the model image returns
 # SOMA only" without a target_rig) -- do not swap in the SMPLX
-# checkpoint without re-checking the license gate (RFD 0028).
+# checkpoint without re-checking the license gate (RFD66606-0028).
 # Install the kimodo package from upstream + the SOMA-X extra it needs
 # for the SOMA-77 skeleton. Checkpoints (Kimodo-SOMA-RP-v1.1 by default,
 # override with KIMODO_MODEL) auto-download from HF on first load;

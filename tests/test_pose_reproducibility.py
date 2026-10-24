@@ -1,5 +1,5 @@
 """Deterministic-reproducibility gate + projection-path verification for
-the SOMA -> ANNY pose step per RFD 2203 review.
+the SOMA -> ANNY pose step per RFD66606-2203 review.
 
 Two gates:
 
@@ -10,7 +10,7 @@ Two gates:
    randomness (a random phenotype under 'all', a per-request torch
    default generator, etc.).
 
-2. Projection-path accuracy check per RFD 2203. anny/test/test_soma.py
+2. Projection-path accuracy check per RFD66606-2203. anny/test/test_soma.py
    verified the direct topology='soma' path against upstream SOMALayer
    at ~7mm max / ~0.6mm mean. This function uses
    topology=TopologyConfig(base_mesh='makehuman'), which routes through
@@ -95,7 +95,7 @@ def test_makehuman_projection_accuracy(loaded):
     joint present in both topologies via the anny bone hierarchy).
 
     A tighter bound is better, and if projection lands within a pencil
-    of the direct path the RFD 2203 verification hook stands with no
+    of the direct path the RFD66606-2203 verification hook stands with no
     further comment. Beyond a pencil is stated cost per DETAILS.
     """
     import anny

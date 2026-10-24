@@ -10,7 +10,7 @@ Negative (b): zero limb bone column on limb-moving poses, diff.
 If positive clears anny thresholds (max<15mm, mean<5mm) AND both
 controls report larger errors than positive, the check has teeth and
 the projection is safe for corpus use. If positive fails, the corpus
-subset is discarded before publish per RFD 2203.
+subset is discarded before publish per RFD66606-2203.
 
 Detection floor: n=4 sees only defects appearing in >75% of frames per
 CLAUDE.md rule 5. Reported alongside the numbers.
