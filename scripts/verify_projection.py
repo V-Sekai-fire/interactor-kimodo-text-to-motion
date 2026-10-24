@@ -1,9 +1,9 @@
-"""Standalone projection-accuracy check for RFD 2203 verification hook.
+"""Standalone projection-accuracy check for RFD66606-2203 verification hook.
 
 Compares anny's makehuman-projected posed joints against the direct
 topology='soma' path on random SOMA poses, gates at anny's own
 thresholds (max<15mm, mean<5mm) per test_soma.py:292-293. Any
-regression beyond the pencil is a spec finding for RFD 2203.
+regression beyond the pencil is a spec finding for RFD66606-2203.
 
 Runs on CPU with 4-thread cap so it doesn't disrupt VRChat on the
 windows-desktop while it's up. A handful of poses; small.

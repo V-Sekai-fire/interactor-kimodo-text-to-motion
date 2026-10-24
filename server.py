@@ -1,11 +1,11 @@
-"""Kimodo text to motion. RFD 0045.
+"""Kimodo text to motion. RFD66606-0045.
 
 The model emits SOMA. The client wants VRM humanoid tracks. Those are
 two things, thus this server returns two things -- a single VRM output
 would make the model look wrong when the retarget is what failed.
 Keeping them apart names the failure correctly.
 
-RFD 0007's motion validation runs here. A motion that leaves the floor
+RFD66606-0007's motion validation runs here. A motion that leaves the floor
 or that inverts a knee must fail here, and not in the viewport.
 """
 
@@ -107,7 +107,7 @@ def _run_upstream(args: dict, work: Path) -> Path:
 
 
 def _pose_anny_from_soma(soma_npz: Path, work: Path) -> Path:
-    """v1 retarget scope per RFD 2203: SOMA -> ANNY posed vertices only.
+    """v1 retarget scope per RFD66606-2203: SOMA -> ANNY posed vertices only.
     No Godot, no VRM. Loads Kimodo's local rotations + root positions
     from the .npz, drives an anny model wearing the SOMA rig on the
     19,158-vertex makehuman topology (matches wholebody133.pth's
@@ -181,7 +181,7 @@ def _pose_anny_from_soma(soma_npz: Path, work: Path) -> Path:
 
 def _retarget(soma: Path, target_rig: str, work: Path) -> Path:
     """v2 deliverable: SOMA -> ANNY -> Godot Humanoid -> VRM via
-    LabRCSF's joints.csv. Not in v1 scope per RFD 2203; v1 stops at
+    LabRCSF's joints.csv. Not in v1 scope per RFD66606-2203; v1 stops at
     ANNY posed vertices."""
     raise NotImplementedError(
         "VRM export deferred to v2. Use _pose_anny_from_soma() for v1's "
@@ -190,7 +190,7 @@ def _retarget(soma: Path, target_rig: str, work: Path) -> Path:
 
 
 def _validate_motion(soma: Path) -> tuple:
-    """RFD 0007. Check floor contact and joint limits. A motion that
+    """RFD66606-0007. Check floor contact and joint limits. A motion that
     leaves the floor or inverts a knee must fail here, before a
     caller ever loads it into a viewport."""
     if STUB:
@@ -216,7 +216,7 @@ def predict(job_input: dict) -> dict:
 
     # v1: always pose ANNY from SOMA output. target_rig gates VRM only,
     # which is v2 (still NotImplementedError). ANNY-posed-vertices is
-    # what RFD 2203's corpus render consumes; no target_rig required.
+    # what RFD66606-2203's corpus render consumes; no target_rig required.
     if STUB:
         anny_path = work / "stub.anny_vertices.npz"
         anny_path.write_bytes(b"ANNYvertsSTUB")
@@ -267,7 +267,7 @@ def load() -> None:
         _MODEL["resolved_name"] = resolved
         _MODEL["device"] = device
 
-        # SOMA rig on the 19,158-vertex makehuman topology per RFD 2203
+        # SOMA rig on the 19,158-vertex makehuman topology per RFD66606-2203
         # topology settlement. remove_unattached_vertices=False keeps
         # the full 19,158 count that wholebody133.pth indexes against;
         # the default True drops vertices and breaks the anchor
